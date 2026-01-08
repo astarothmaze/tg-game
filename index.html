@@ -3,130 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Dodge</title>
+    <title>DevOps Tycoon</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; color: #0f0; font-family: 'Courier New', monospace; }
-        canvas { display: block; }
-        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; font-weight: bold; font-size: 20px; pointer-events: none; }
-        #gameover { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,0.9); padding: 20px; border: 2px solid #0f0; border-radius: 10px; }
-        button { background: #0f0; color: #000; border: none; padding: 10px 20px; font-size: 18px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        :root {
+            --main-color: #0f0;
+            --bg-color: #051105;
+            --scanline: rgba(0, 255, 0, 0.1);
+        }
+        body {
+            background-color: #000;
+            color: var(--main-color);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* CRT Effect */
+        #crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none; z-index: 999;
+        }
+        .screen { display: none; padding: 20px; height: 100vh; box-sizing: border-box; flex-direction: column; }
+        .active { display: flex; }
+        
+        /* UI Elements */
+        h1 { border-bottom: 2px solid var(--main-color); padding-bottom: 10px; font-size: 24px; text-transform: uppercase; margin-top: 0; }
+        .btn {
+            border: 1px solid var(--main-color);
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            text-align: center;
+            font-weight: bold;
+            transition: 0.1s;
+            text-transform: uppercase;
+        }
+        .btn:active { background: var(--main-color); color: #000; }
+        .stats-bar { display: flex; justify-content: space-between; border-bottom: 1px solid var(--main-color); margin-bottom: 15px; padding-bottom: 5px; }
+        
+        /* Terminal Logs */
+        #log-area { flex-grow: 1; overflow-y: auto; font-size: 12px; border: 1px dashed var(--main-color); padding: 10px; margin-bottom: 10px; opacity: 0.8; }
+        .log-entry { margin-bottom: 4px; }
+        
+        /* Shop Items */
+        .shop-item { border: 1px solid var(--main-color); padding: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .shop-item span { font-size: 12px; }
+        
+        /* Settings Colors */
+        .color-opt { display: inline-block; width: 30px; height: 30px; border: 1px solid #fff; margin-right: 10px; cursor: pointer; }
+        
+        .disabled { opacity: 0.5; pointer-events: none; border-style: dashed; }
     </style>
 </head>
 <body>
-    <div id="ui">Score: <span id="scoreVal">0</span></div>
-    <div id="gameover">
-        <h1>SYSTEM FAILURE</h1>
-        <p>Score: <span id="finalScore">0</span></p>
-        <button onclick="resetGame()">REBOOT</button>
+
+    <div id="crt-overlay"></div>
+
+    <div id="menu-screen" class="screen active">
+        <h1>> SYSTEM_ROOT</h1>
+        <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+            <div class="btn" onclick="startGame()">[ EXECUTE_SESSION ]</div>
+            <div class="btn" onclick="showScreen('settings-screen')">[ CONFIG ]</div>
+            <div class="btn" onclick="resetProgress()">[ FLUSH_DATA ]</div>
+        </div>
+        <div style="text-align: center; font-size: 10px; opacity: 0.7;">v2.0.4 | SECURE CONNECTION</div>
     </div>
-    <canvas id="gameCanvas"></canvas>
+
+    <div id="game-screen" class="screen">
+        <div class="stats-bar">
+            <span>HASH: <b id="moneyDisplay">0</b></span>
+            <span>RAM: <b id="incomeDisplay">0</b>/s</span>
+        </div>
+
+        <div id="log-area"></div>
+
+        <div class="btn" id="mainBtn" onclick="manualHack()">[ MINE HASH BLOCK ]</div>
+        
+        <div style="display: flex; gap: 10px;">
+            <div class="btn" style="flex: 1;" onclick="showScreen('shop-screen')">UPGRADES</div>
+            <div class="btn" style="flex: 1;" onclick="showScreen('menu-screen')">PAUSE</div>
+        </div>
+    </div>
+
+    <div id="shop-screen" class="screen">
+        <h1>> MODULES</h1>
+        <div id="shop-container" style="flex-grow: 1; overflow-y: auto;">
+            </div>
+        <div class="btn" onclick="showScreen('game-screen')">< BACK</div>
+    </div>
+
+    <div id="settings-screen" class="screen">
+        <h1>> CONFIGURATION</h1>
+        <p>THEME SELECTION:</p>
+        <div style="margin-bottom: 20px;">
+            <div class="color-opt" style="background: #0f0;" onclick="setTheme('#0f0', '#051105')"></div>
+            <div class="color-opt" style="background: #ffb000;" onclick="setTheme('#ffb000', '#110d00')"></div>
+            <div class="color-opt" style="background: #00f0ff;" onclick="setTheme('#00f0ff', '#001114')"></div>
+            <div class="color-opt" style="background: #ff0055;" onclick="setTheme('#ff0055', '#110005')"></div>
+        </div>
+        <div class="btn" onclick="showScreen('menu-screen')">< APPLY & EXIT</div>
+    </div>
 
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
         const tg = window.Telegram.WebApp;
-        
-        // Сообщаем телеге, что мы готовы
         tg.ready();
-        tg.expand(); 
+        tg.expand();
 
-        let width, height;
-        let player = { x: 0, y: 0, size: 30, color: '#0f0' };
-        let obstacles = [];
-        let score = 0;
-        let gameOver = false;
-        let speed = 3;
+        // Game State
+        let state = {
+            money: 0,
+            clickPower: 1,
+            autoIncome: 0,
+            upgrades: {
+                cpu: { count: 0, cost: 15, income: 1, name: "CPU Thread" },
+                gpu: { count: 0, cost: 100, income: 8, name: "GPU Cluster" },
+                server: { count: 0, cost: 500, income: 45, name: "Dedicated Server" },
+                ai: { count: 0, cost: 2000, income: 200, name: "AI Algorithm" }
+            },
+            theme: { main: '#0f0', bg: '#051105' }
+        };
 
-        function resize() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width;
-            canvas.height = height;
-            player.y = height - 100;
-            if (player.x === 0) player.x = width / 2;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // Управление
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault(); // Блокируем скролл
-            let touchX = e.touches[0].clientX;
-            player.x = touchX;
-        }, { passive: false });
-
-        canvas.addEventListener('mousemove', (e) => {
-            player.x = e.clientX;
-        });
-
-        function spawnObstacle() {
-            const size = Math.random() * 50 + 20;
-            obstacles.push({
-                x: Math.random() * width,
-                y: -size,
-                size: size,
-                speed: speed + Math.random() * 2
-            });
+        // Load Save
+        if(localStorage.getItem('devopsSave')) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('devopsSave'));
+                state = { ...state, ...saved }; // Merge logic
+                setTheme(state.theme.main, state.theme.bg);
+            } catch(e) { console.error('Save Corrupt'); }
         }
 
-        function update() {
-            if (gameOver) return;
+        // DOM Elements
+        const moneyEl = document.getElementById('moneyDisplay');
+        const incomeEl = document.getElementById('incomeDisplay');
+        const logEl = document.getElementById('log-area');
 
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // Эффект шлейфа
-            ctx.fillRect(0, 0, width, height);
+        // Logic
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(id === 'shop-screen') renderShop();
+        }
 
-            // Игрок
-            ctx.fillStyle = player.color;
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = player.color;
-            ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
-            ctx.shadowBlur = 0;
+        function startGame() {
+            showScreen('game-screen');
+            addLog("Session started...", true);
+        }
 
-            // Препятствия
-            if (Math.random() < 0.05) spawnObstacle();
+        function manualHack() {
+            addMoney(state.clickPower);
+            tg.HapticFeedback.impactOccurred('light');
+            
+            // Visual fun
+            const phrases = ["Decrypting...", "Brute-force...", "Packet sent...", "Hash found..."];
+            addLog(phrases[Math.floor(Math.random() * phrases.length)]);
+        }
 
-            ctx.fillStyle = '#f00';
-            for (let i = 0; i < obstacles.length; i++) {
-                let obs = obstacles[i];
-                obs.y += obs.speed;
-                ctx.fillRect(obs.x - obs.size/2, obs.y - obs.size/2, obs.size, obs.size);
+        function addMoney(amount) {
+            state.money += amount;
+            updateUI();
+        }
 
-                // Коллизия (простая)
-                let dist = Math.hypot(player.x - obs.x, player.y - obs.y);
-                if (dist < (player.size/2 + obs.size/2)) {
-                    endGame();
-                }
+        function updateUI() {
+            moneyEl.innerText = Math.floor(state.money);
+            incomeEl.innerText = state.autoIncome;
+        }
 
-                if (obs.y > height) {
-                    obstacles.splice(i, 1);
-                    i--;
-                    score++;
-                    document.getElementById('scoreVal').innerText = score;
-                    if (score % 50 === 0) speed += 0.5; // Ускорение
-                }
+        function addLog(text, system = false) {
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            div.innerHTML = `<span style="opacity:0.5">[${time}]</span> ${system ? 'root@sys: ' : './ '}${text}`;
+            logEl.appendChild(div);
+            if(logEl.childNodes.length > 20) logEl.removeChild(logEl.firstChild);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Upgrade System
+        function renderShop() {
+            const container = document.getElementById('shop-container');
+            container.innerHTML = '';
+            
+            for(const [key, item] of Object.entries(state.upgrades)) {
+                const div = document.createElement('div');
+                div.className = `shop-item ${state.money < item.cost ? 'disabled' : ''}`;
+                div.innerHTML = `
+                    <div>
+                        <b>${item.name}</b><br>
+                        <span style="opacity:0.7">+${item.income}/s | Owned: ${item.count}</span>
+                    </div>
+                    <div class="btn" style="margin:0; padding: 5px 10px; font-size: 14px;" onclick="buy('${key}')">
+                        $${Math.floor(item.cost)}
+                    </div>
+                `;
+                container.appendChild(div);
             }
-            requestAnimationFrame(update);
         }
 
-        function endGame() {
-            gameOver = true;
-            tg.HapticFeedback.impactOccurred('heavy'); // Вибрация телефона через API Телеграм
-            document.getElementById('gameover').style.display = 'block';
-            document.getElementById('finalScore').innerText = score;
+        window.buy = function(key) { // Global scope for onclick
+            const item = state.upgrades[key];
+            if(state.money >= item.cost) {
+                state.money -= item.cost;
+                item.count++;
+                item.cost *= 1.4; // Price increase
+                state.autoIncome += item.income;
+                tg.HapticFeedback.notificationOccurred('success');
+                addLog(`Installed ${item.name}`);
+                renderShop();
+                updateUI();
+                saveGame();
+            } else {
+                tg.HapticFeedback.notificationOccurred('error');
+            }
         }
 
-        function resetGame() {
-            obstacles = [];
-            score = 0;
-            speed = 3;
-            gameOver = false;
-            document.getElementById('scoreVal').innerText = '0';
-            document.getElementById('gameover').style.display = 'none';
-            update();
+        // Settings
+        window.setTheme = function(main, bg) {
+            document.documentElement.style.setProperty('--main-color', main);
+            document.documentElement.style.setProperty('--bg-color', bg);
+            document.body.style.backgroundColor = bg;
+            state.theme = { main, bg };
+            saveGame();
         }
 
-        update();
+        window.resetProgress = function() {
+            if(confirm('Wipe system data?')) {
+                localStorage.removeItem('devopsSave');
+                location.reload();
+            }
+        }
+
+        function saveGame() {
+            localStorage.setItem('devopsSave', JSON.stringify(state));
+        }
+
+        // Game Loop
+        setInterval(() => {
+            if(state.autoIncome > 0) {
+                addMoney(state.autoIncome / 10); // 10 ticks per second
+            }
+        }, 100);
+
+        setInterval(() => {
+            saveGame();
+        }, 5000); // Auto-save every 5s
+
+        updateUI();
+        setTheme(state.theme.main, state.theme.bg); // Init theme
+
     </script>
 </body>
 </html>
